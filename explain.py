@@ -37,6 +37,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data-rus-eng")
 CACHE_DIR = os.path.join(HERE, "claude_data")
+ROSEDU = os.path.join(HERE, "rosedu_words.json")
 
 LEMMA_COL = "Target language lemma"
 EXAMPLE_COL = "Target language example sentence"
@@ -44,6 +45,20 @@ EXAMPLE_COL = "Target language example sentence"
 # SMARTool marks removed entries with numeric placeholder lemmas like
 # "1305 deleted" / "2412-2414 deleted". Real Russian lemmas carry no digits.
 JUNK_LEMMA = re.compile(r"\d")
+
+# Russian stress marks (combining acute/grave). Stripped both for comparison and
+# for storage, so the dataset stays uniform (SMARTool carries none) and the card
+# shows a plain word. Only these marks are removed -- й/ё stay intact.
+_STRESS = str.maketrans("", "", "\u0300\u0301\u0340\u0341")
+
+
+def deaccent(word):
+    return word.translate(_STRESS)
+
+
+def norm_key(word):
+    """Accent- and case-insensitive key for de-duplicating across sources."""
+    return deaccent(word).strip().lower()
 
 MODEL = "claude-opus-5"
 # One-shot, no tools: the model can't read/write/loop, it just answers.
@@ -90,10 +105,14 @@ RULES = """\
 
 
 def load_source():
-    """lemma -> [example sentences], merged across all SMARTool CSV files.
+    """lemma -> [example sentences], from SMARTool plus the ros-edu minimum.
 
-    Lemmas may repeat across levels/rows; examples are collected in first-seen
-    order and de-duplicated. Rows without a lemma or example are ignored.
+    SMARTool lemmas may repeat across levels/rows; example sentences are collected
+    in first-seen order, de-duplicated. Then the ros-edu words (rosedu_words.json,
+    fetch_rosedu.py) are merged in, but only those whose accent-stripped form is
+    NOT already present -- so it purely EXTENDS the set. ros-edu carries no example
+    sentences, so its new words come in with none (the model then invents one).
+    Stored words are stress-stripped for a uniform, plain-word dataset.
     """
     lemmas = {}
     for path in sorted(glob.glob(os.path.join(DATA_DIR, "SMARTool_data_*.csv"))):
@@ -106,7 +125,24 @@ def load_source():
                 bucket = lemmas.setdefault(lemma, [])
                 if example and example not in bucket:
                     bucket.append(example)
+
+    keys = {norm_key(l) for l in lemmas}
+    for word in load_rosedu_words():
+        word = deaccent(word).strip()
+        k = norm_key(word)
+        if not k or JUNK_LEMMA.search(word) or k in keys:
+            continue
+        keys.add(k)
+        lemmas.setdefault(word, [])
     return lemmas
+
+
+def load_rosedu_words():
+    """Russian headwords from rosedu_words.json (empty if the file is absent)."""
+    if not os.path.exists(ROSEDU):
+        return []
+    with open(ROSEDU, encoding="utf-8") as f:
+        return [(r.get("word_rus") or "").strip() for r in json.load(f)]
 
 
 # Characters illegal in a path segment on Windows (the strictest of the three);
