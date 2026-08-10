@@ -38,20 +38,46 @@ LEVEL_COL = "Level"
 
 
 def load_levels():
-    """lemma -> lowest CEFR level string among its rows (unknown levels ignored)."""
+    """accent-stripped word -> lowest CEFR rank, from SMARTool + the ros-edu minimum.
+
+    Keyed the same way explain.load_source() de-duplicates (norm_key), so it lines
+    up with both the stress-stripped ros-edu words and the SMARTool lemmas.
+    """
     best = {}
+
+    def consider(word, rank):
+        if rank is None or not word or explain.JUNK_LEMMA.search(word):
+            return
+        k = explain.norm_key(word)
+        if k and (best.get(k) is None or rank < best[k]):
+            best[k] = rank
+
     for path in sorted(glob.glob(os.path.join(explain.DATA_DIR, "SMARTool_data_*.csv"))):
         with open(path, encoding="utf-8-sig", newline="") as f:
             for row in csv.DictReader(f):
-                lemma = (row.get(explain.LEMMA_COL) or "").strip()
-                if not lemma or explain.JUNK_LEMMA.search(lemma):
-                    continue
-                rank = LEVEL_RANK.get((row.get(LEVEL_COL) or "").strip().upper())
-                if rank is None:
-                    continue
-                if best.get(lemma) is None or rank < best[lemma]:
-                    best[lemma] = rank
+                consider((row.get(explain.LEMMA_COL) or "").strip(),
+                         LEVEL_RANK.get((row.get(LEVEL_COL) or "").strip().upper()))
+
+    for word, level_ids in load_rosedu_levels():
+        consider(word, rosedu_rank(level_ids))
     return best
+
+
+def rosedu_rank(level_ids):
+    """Lowest of the ros-edu level ids (1=A1 .. 4=B2) as a LEVELS rank, or None."""
+    ranks = [i - 1 for i in
+             (int(x) for x in level_ids.replace(" ", "").split(",") if x.isdigit())
+             if 1 <= i <= len(LEVELS)]
+    return min(ranks) if ranks else None
+
+
+def load_rosedu_levels():
+    """(word_rus, level_ids) pairs from rosedu_words.json (empty if absent)."""
+    if not os.path.exists(explain.ROSEDU):
+        return []
+    with open(explain.ROSEDU, encoding="utf-8") as f:
+        return [((r.get("word_rus") or "").strip(), r.get("level_ids") or "")
+                for r in json.load(f)]
 
 
 def load_cards():
@@ -102,7 +128,7 @@ def main():
     by_level = defaultdict(list)
     no_level = 0
     for c in cards:
-        rank = levels.get(c["word"])
+        rank = levels.get(explain.norm_key(c["word"]))
         if rank is None:
             no_level += 1
             continue
