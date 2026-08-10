@@ -22,7 +22,8 @@ so the run is fully resumable -- just re-run it.
 Usage: explain.py [BATCH] [MAX_BATCHES]
   BATCH        lemmas per claude call (default 200; cost is ~fixed per call, so
                bigger batches mean fewer calls)
-  MAX_BATCHES  stop after N batches; 0 = all (default 1, i.e. a dry run)
+  MAX_BATCHES  stop after N batches; 0 = all (default 0). Resumable, so just
+               let it run; pass e.g. 1 to try a single batch first.
 """
 
 import csv
@@ -209,7 +210,7 @@ def write_results(obj, batch_words):
 
 def main():
     batch = int(sys.argv[1]) if len(sys.argv) > 1 else 200
-    max_batches = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+    max_batches = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
     lemmas = load_source()
     words = todo_words(lemmas)
@@ -234,8 +235,8 @@ def main():
         print(f"  wrote {len(written)} explanations; batch cost ${cost:.4f}")
 
     print(f"\ntotal: {len(all_written)} explanations written, ${total_cost:.4f}")
-    if max_batches:
-        print("(dry run: pass a 2nd arg of 0 to process all batches)")
+    if max_batches and len(batches) < -(-total // batch):
+        print(f"(stopped after {max_batches} batch(es); re-run to continue, or omit the limit for all)")
 
 
 if __name__ == "__main__":
