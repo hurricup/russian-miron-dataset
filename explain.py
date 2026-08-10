@@ -32,7 +32,6 @@ import os
 import re
 import subprocess
 import sys
-import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data-rus-eng")
@@ -99,8 +98,29 @@ def load_source():
     return lemmas
 
 
+# Characters illegal in a path segment on Windows (the strictest of the three);
+# this is a superset of macOS (`/`, `:`) and Linux (`/`). Control chars and a
+# trailing dot/space (also rejected by Windows) are handled separately. Anything
+# else -- including Cyrillic -- is kept as-is so filenames stay readable.
+_FORBIDDEN = set('<>:"/\\|?*')
+
+
+def safe_filename(word):
+    """Percent-encode only path-hostile characters, keeping the word readable."""
+    out = []
+    for ch in word:
+        if ch in _FORBIDDEN or ord(ch) < 32:
+            out.append("%%%02X" % ord(ch))
+        else:
+            out.append(ch)
+    name = "".join(out)
+    if name and name[-1] in " .":  # Windows forbids a trailing dot or space
+        name = name[:-1] + "%%%02X" % ord(name[-1])
+    return name + ".json"
+
+
 def cache_path(word):
-    return os.path.join(CACHE_DIR, urllib.parse.quote(word, safe="") + ".json")
+    return os.path.join(CACHE_DIR, safe_filename(word))
 
 
 def todo_words(lemmas):
