@@ -2,3 +2,6 @@
 data-rus-eng/
 
 __pycache__/
+
+# intermediate per-page cache; rosedu_words.json is the combined artifact
+rosedu_cache/
