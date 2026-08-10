@@ -20,7 +20,7 @@ named with the URL-quoted word, written atomically. A cached word is skipped,
 so the run is fully resumable -- just re-run it.
 
 Usage: explain.py [BATCH] [MAX_BATCHES]
-  BATCH        lemmas per claude call (default 50; cost is ~fixed per call, so
+  BATCH        lemmas per claude call (default 200; cost is ~fixed per call, so
                bigger batches mean fewer calls)
   MAX_BATCHES  stop after N batches; 0 = all (default 1, i.e. a dry run)
 """
@@ -177,7 +177,7 @@ def write_results(obj, batch_words):
 
 
 def main():
-    batch = int(sys.argv[1]) if len(sys.argv) > 1 else 50
+    batch = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     max_batches = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 
     lemmas = load_source()
